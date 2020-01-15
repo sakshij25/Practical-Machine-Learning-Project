@@ -1,0 +1,200 @@
+---
+title: "Practical Machine Learning Project"
+author: "SAKSHI JAIN"
+date: "1/15/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## OverView
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+## Loading Packages 
+
+```{r loading, cache=TRUE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+library(corrplot)
+library(gbm)
+```
+
+## Getting Data
+
+```{r getting, cache=TRUE}
+train_data <- read.csv("C:/Users/Prachi/Desktop/R programming/machine learning project/pml-training.csv")
+test_data <- read.csv("C:/Users/Prachi/Desktop/R programming/machine learning project/pml-testing.csv")
+dim(train_data)
+dim(test_data)
+```
+As shown below there are 19622 observations and 160 variables in the Training dataset
+
+## Cleaning Data
+
+We remove the variables that contains missing values. Note along the cleaning process we display the dimension of the reduced dataset
+
+```{r cleaning, cache=TRUE}
+traindata <- train_data[,colSums(is.na(train_data)) == 0]
+testdata <- test_data[,colSums(is.na(test_data)) == 0]
+dim(traindata)
+dim(testdata)
+```
+
+# We now remove the first seven variables as they have little impact on the outcome classe
+
+```{r data, cache=TRUE}
+traindata <- traindata[,-c(1:7)]
+testdata <- testdata[,-c(1:7)]
+```
+
+## Preparing Datasets for Prediction
+
+Preparing the data for prediction by splitting the training data into 70% as train data and 30% as test data. This splitting will server also to compute the out-of-sample errors.
+
+The test data renamed: valid_in (validate data) will stay as is and will be used later to test the prodction algorithm on the 20 cases.
+
+```{r prediction, cache=TRUE}
+set.seed(1234) 
+inTrain <- createDataPartition(traindata$classe, p = 0.7, list = FALSE)
+traindata <- traindata[inTrain, ]
+testingData <- traindata[-inTrain, ]
+dim(traindata)
+dim(testingData)
+```
+
+Cleaning even further by removing the variables that are near-zero-variance
+
+```{r furthercleaning, cache=TRUE}
+NZV <- nearZeroVar(traindata)
+traindata <- traindata[, -NZV]
+testingData  <- testingData[, -NZV]
+dim(traindata)
+dim(testingData)
+```
+After this cleaning we are down now to 53 variables
+
+The following correlation plot uses the following parameters (source:CRAN Package ‘corrplot’) “FPC”: the first principal component order. “AOE”: the angular order tl.cex Numeric, for the size of text label (variable names) tl.col The color of text label.
+
+```{r matrix, cache=TRUE}
+cor_mat <- cor(traindata[, -53])
+corrplot(cor_mat, order = "FPC", method = "color", type = "upper", 
+         tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+```
+
+In the corrplot graph the correlated predictors (variables ) are those with a dark color intersection.
+
+To obtain the names of the variables we do the following
+
+we use the findCorrelation function to search for highly correlated attributes with a cut off equal to 0.75.
+
+```{r correlation, cache=TRUE}
+highlyCorrelated = findCorrelation(cor_mat, cutoff=0.75)
+```
+
+We then obtain the names of highly correlated attributes
+
+```{r corr, cache=TRUE}
+names(traindata)[highlyCorrelated]
+```
+
+## Model building
+
+For this project we will use two different algorithms, classification trees and random forests, to predict the outcome.
+
+1. classification trees
+2. random forests
+3. Generalized Boosted Model
+
+## Prediction with classification trees
+
+We first obtail the model, and then we use the fancyRpartPlot() function to plot the classification tree as a dendogram.
+
+```{r trees, cache=TRUE}
+set.seed(12345)
+decisionTreeMod1 <- rpart(classe ~ ., data=traindata, method="class")
+fancyRpartPlot(decisionTreeMod1)
+```
+
+We then validate the model “decisionTreeModel” on the testData to find out how well it performs by looking at the accuracy variable.
+
+```{r validation, cache=TRUE}
+predictTreeMod1 <- predict(decisionTreeMod1, testingData, type = "class")
+cmtree <- confusionMatrix(predictTreeMod1, testingData$classe)
+cmtree
+```
+
+### plot matrix results
+
+```{r plot, cache=TRUE}
+plot(cmtree$table, col = cmtree$byClass,main = paste("Decision Tree - Accuracy =", round(cmtree$overall['Accuracy'], 4)))
+```
+
+We see that the accuracy rate of the model is low: 0.6967 and therefore the out-of-sample-error is about 0.3 which is considerable.
+
+## Prediction with Random Forest
+
+We first determine the model
+
+```{r forest, cache=TRUE}
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modRF1 <- train(classe ~ ., data=traindata, method="rf", trControl=controlRF)
+modRF1$finalModel
+```
+
+We then validate the model obtained model “modRF1” on the test data to find out how well it performs by looking at the Accuracy variable
+
+```{r testing, cache=TRUE}
+predictRF1 <- predict(modRF1, newdata=testingData)
+cmrf <- confusionMatrix(predictRF1, testingData$classe)
+cmrf
+```
+
+#The accuracy rate using the random forest is very high: Accuracy : 1 and therefore the out-of-sample-error is equal to 0***. But it might be due to overfitting.
+
+Let’s plot the model
+
+```{r plotting, cache=TRUE}
+plot(modRF1)
+```
+
+```{r plots,cache=TRUE}
+plot(cmrf$table, col = cmrf$byClass, main = paste("Random Forest Confusion Matrix: Accuracy =", round(cmrf$overall['Accuracy'], 4)))
+```
+
+##Prediction with Generalized Boosted Regression Models
+
+```{r gbr, cache=TRUE}
+set.seed(12345)
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modGBM  <- train(classe ~ ., data=traindata, method = "gbm", trControl = controlGBM, verbose = FALSE)
+modGBM$finalModel
+print(modGBM)
+```
+
+## Validate the GBM model
+
+```{r model,cache=TRUE}
+predictGBM <- predict(modGBM, newdata=testingData)
+cmGBM <- confusionMatrix(predictGBM, testingData$classe)
+cmGBM
+```
+
+### The accuracy rate using the random forest is very high: Accuracy : 0.9731 and therefore the *out-of-sample-error is equal to 0.0264**.
+
+## Applying the best model to the validation data
+
+By comparing the accuracy rate values of the three models, it is clear the the ‘Random Forest’ model is the winner. So will use it on the validation data.
+
+```{r result,cache=TRUE}
+Results <- predict(modRF1, newdata=test_data)
+Results
+```
+
+The Results output will be used to answer the “Course Project Prediction Quiz”
