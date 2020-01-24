@@ -186,7 +186,7 @@ cmGBM <- confusionMatrix(predictGBM, testingData$classe)
 cmGBM
 ```
 
-### The accuracy rate using the random forest is very high: Accuracy : 0.9731 and therefore the *out-of-sample-error is equal to 0.0264**.
+### The accuracy rate using the random forest is very high: Accuracy : 0.9731 and therefore the *out-of-sample-error is equal to 0.0269**.
 
 ## Applying the best model to the validation data
 
